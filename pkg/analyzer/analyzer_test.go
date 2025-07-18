@@ -21,3 +21,42 @@ func TestConfigGloballyDenied(t *testing.T) {
 
 	analysistest.Run(t, td, a, "globally")
 }
+
+func TestConfigSpecificPkg(t *testing.T) {
+	{
+		c := config{
+			Pkg: pkgDenyMap{
+				"globally": "json,xml",
+			},
+		}
+
+		td := analysistest.TestData()
+		a := newAnalyzerWithConfig(c)
+
+		analysistest.Run(t, td, a, "globally")
+	}
+	{
+		c := config{
+			Pkg: pkgDenyMap{
+				"globally": "json,xml",
+			},
+		}
+
+		td := analysistest.TestData()
+		a := newAnalyzerWithConfig(c)
+
+		analysistest.Run(t, td, a, "noconfig")
+	}
+	{
+		c := config{
+			Pkg: pkgDenyMap{
+				"globally": "json,xml",
+			},
+		}
+
+		td := analysistest.TestData()
+		a := newAnalyzerWithConfig(c)
+
+		analysistest.Run(t, td, a, "tags")
+	}
+}

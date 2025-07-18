@@ -21,7 +21,10 @@ func NewAnalyzer() *analysis.Analyzer {
 		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	}
 
+	r.c.Pkg = make(pkgDenyMap)
+
 	a.Flags.StringVar(&r.c.GlobalTagsDenied, "denied", "", "comma-separated list of tags that are not allowed globally")
+	a.Flags.Var(&r.c.Pkg, "denied-pkg", "Per-package denied tags, format: pkg:tag1,tag2")
 
 	return a
 }
@@ -42,8 +45,40 @@ func newAnalyzerWithConfig(c config) *analysis.Analyzer {
 	return a
 }
 
+type pkgDenyMap map[string]string
+
+func (p *pkgDenyMap) String() string {
+	if p == nil {
+		return ""
+	}
+
+	var result []string
+	for pkg, tags := range *p {
+		tags = strings.TrimSpace(tags)
+		if tags == "" {
+			continue
+		}
+		result = append(result, fmt.Sprintf("%s:%s", pkg, tags))
+	}
+	return strings.Join(result, ",")
+}
+
+func (p *pkgDenyMap) Set(value string) error {
+	parts := strings.Split(value, ":")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid format for denied-pkg: %s, expected pkg:tag1,tag2", value)
+	}
+
+	pkg := strings.TrimSpace(parts[0])
+	tags := parts[1]
+
+	(*p)[pkg] = tags
+	return nil
+}
+
 type config struct {
 	GlobalTagsDenied string
+	Pkg              pkgDenyMap
 }
 
 type runner struct {
@@ -54,15 +89,28 @@ type runner struct {
 func (r *runner) run(pass *analysis.Pass) (interface{}, error) {
 	r.pass = pass
 
+	if r.c.GlobalTagsDenied == "" && len(r.c.Pkg) == 0 {
+		return nil, nil
+	}
+
 	inspector, ok := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	if !ok {
 		return nil, nil
 	}
 
+	tagsToCheck := splitTags(r.c.GlobalTagsDenied)
+
+	if len(r.c.Pkg) > 0 {
+		pkgName := pass.Pkg.Name()
+		if tags, found := r.c.Pkg[pkgName]; found {
+			tagsToCheck = append(tagsToCheck, splitTags(tags)...)
+		}
+	}
+
 	inspector.Preorder(r.filters(), func(node ast.Node) {
 		switch node := node.(type) {
 		case *ast.StructType:
-			fieldAffected, tagFailed, found := containsTags(splitTags(r.c.GlobalTagsDenied), node)
+			fieldAffected, tagFailed, found := containsTags(tagsToCheck, node)
 			if found {
 				pass.Reportf(node.Pos(), "field '%s' contains denied tags: '%v'", fieldAffected, tagFailed)
 			}
