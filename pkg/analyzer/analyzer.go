@@ -21,7 +21,7 @@ func NewAnalyzer() *analysis.Analyzer {
 		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	}
 
-	a.Flags.StringVar(&r.c.GlobalTagsDenied, "denied-tags", "", "comma-separated list of tags that are not allowed globally")
+	a.Flags.StringVar(&r.c.GlobalTagsDenied, "denied", "", "comma-separated list of tags that are not allowed globally")
 
 	return a
 }
