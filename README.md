@@ -51,7 +51,7 @@ This prevents confusion and enforces architectural boundaries, saving debugging 
 ## Installation
 
 ```bash
-go install github.com/your-username/notag@latest
+go install github.com/guerinoni/notag@latest
 ```
 
 ## Usage
