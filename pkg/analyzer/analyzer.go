@@ -100,6 +100,10 @@ func containsTags(tags []string, n *ast.StructType) (string, string, bool) {
 	}
 
 	for _, field := range n.Fields.List {
+		if field.Tag == nil {
+			continue
+		}
+
 		tagsFailed := []string{}
 		for _, denied := range tags {
 			if strings.Contains(field.Tag.Value, denied) {
