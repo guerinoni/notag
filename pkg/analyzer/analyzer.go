@@ -31,9 +31,9 @@ func NewAnalyzer() *analysis.Analyzer {
 	return a
 }
 
-// newAnalyzerWithConfig creates a new analyzer with the provided configuration.
+// NewAnalyzerWithConfig creates a new analyzer with the provided configuration.
 // This is useful for testing purposes, allowing you to pass a specific configuration.
-func newAnalyzerWithConfig(c config) *analysis.Analyzer {
+func NewAnalyzerWithConfig(c config) *analysis.Analyzer {
 	var r runner
 	r.c = c
 

@@ -9,7 +9,7 @@ import (
 func TestConfigEmpty(t *testing.T) {
 	c := config{}
 	td := analysistest.TestData()
-	a := newAnalyzerWithConfig(c)
+	a := NewAnalyzerWithConfig(c)
 
 	analysistest.Run(t, td, a, "noconfig")
 }
@@ -17,7 +17,7 @@ func TestConfigEmpty(t *testing.T) {
 func TestConfigGloballyDenied(t *testing.T) {
 	c := config{GlobalTagsDenied: "json,xml"}
 	td := analysistest.TestData()
-	a := newAnalyzerWithConfig(c)
+	a := NewAnalyzerWithConfig(c)
 
 	analysistest.Run(t, td, a, "globally")
 }
@@ -31,7 +31,7 @@ func TestConfigSpecificPkg(t *testing.T) {
 		}
 
 		td := analysistest.TestData()
-		a := newAnalyzerWithConfig(c)
+		a := NewAnalyzerWithConfig(c)
 
 		analysistest.Run(t, td, a, "globally")
 	}
@@ -43,7 +43,7 @@ func TestConfigSpecificPkg(t *testing.T) {
 		}
 
 		td := analysistest.TestData()
-		a := newAnalyzerWithConfig(c)
+		a := NewAnalyzerWithConfig(c)
 
 		analysistest.Run(t, td, a, "noconfig")
 	}
@@ -55,7 +55,7 @@ func TestConfigSpecificPkg(t *testing.T) {
 		}
 
 		td := analysistest.TestData()
-		a := newAnalyzerWithConfig(c)
+		a := NewAnalyzerWithConfig(c)
 
 		analysistest.Run(t, td, a, "tags")
 	}
