@@ -65,6 +65,12 @@ notag -denied-pkg service:json ./...
 notag -denied-pkg service:json -denied-pkg repository:xml ./...
 ```
 
+### Package Path-based Restrictions
+```bash
+# Deny XML tags in the "repository" package
+notag -denied-pkg-path github.com/guerinoni/notag/analyzer:xml ./...
+```
+
 ### Global Tag Restrictions
 ```bash
 # Deny validate and xml tags globally across all packages
@@ -72,6 +78,15 @@ notag -denied validate,xml ./...
 
 # Combine global and package-specific rules
 notag -denied validate -denied-pkg service:json ./...
+```
+
+### All combination of restrictions
+```bash
+# This denys:
+# globally db tags,
+# in the "service" package: json tags,
+# in the "github.com/org/be/internal/controllers" package: xml tags
+notag --denied db --denied-pkg service:json --denied-pkg-path github.com/org/be/internal/controllers:xml ./...
 ```
 
 ## Benefits
@@ -88,5 +103,6 @@ Instead of littering your internal structs with `json:"-"` tags, `notag` encoura
 - [x] Package-specific tag restrictions
 - [x] Combine global + pkg specific directive
 - [x] Multiple tag support
-- [ ] Package path-based restrictions (coming soon)
+- [x] Package path-based restrictions
+- [ ] Find in nested structs (coming soon)
 
