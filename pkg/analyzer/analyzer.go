@@ -21,21 +21,21 @@ func NewAnalyzer() *analysis.Analyzer {
 		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	}
 
-	r.c.Pkg = make(pkgDenyMap)
-	r.c.PkgPath = make(pkgDenyMap)
+	r.setting.Pkg = make(pkgDenyMap)
+	r.setting.PkgPath = make(pkgDenyMap)
 
-	a.Flags.StringVar(&r.c.GlobalTagsDenied, "denied", "", "comma-separated list of tags that are not allowed globally")
-	a.Flags.Var(&r.c.Pkg, "denied-pkg", "Per-package denied tags, format: pkg:tag1,tag2")
-	a.Flags.Var(&r.c.PkgPath, "denied-pkg-path", "Per-package path denied tags, format: pkg_path:tag1,tag2")
+	a.Flags.StringVar(&r.setting.GlobalTagsDenied, "denied", "", "comma-separated list of tags that are not allowed globally")
+	a.Flags.Var(&r.setting.Pkg, "denied-pkg", "Per-package denied tags, format: pkg:tag1,tag2")
+	a.Flags.Var(&r.setting.PkgPath, "denied-pkg-path", "Per-package path denied tags, format: pkg_path:tag1,tag2")
 
 	return a
 }
 
 // NewAnalyzerWithConfig creates a new analyzer with the provided configuration.
 // This is useful for testing purposes, allowing you to pass a specific configuration.
-func NewAnalyzerWithConfig(c config) *analysis.Analyzer {
+func NewAnalyzerWithConfig(c Setting) *analysis.Analyzer {
 	var r runner
-	r.c = c
+	r.setting = c
 
 	a := &analysis.Analyzer{
 		Name:     "notag",
@@ -78,7 +78,7 @@ func (p *pkgDenyMap) Set(value string) error {
 	return nil
 }
 
-type config struct {
+type Setting struct {
 	GlobalTagsDenied string
 	// Pkg is a map where the key is the package name and the value is a comma-separated list of denied tags.
 	Pkg pkgDenyMap
@@ -87,14 +87,14 @@ type config struct {
 }
 
 type runner struct {
-	c    config
+	setting    Setting
 	pass *analysis.Pass
 }
 
 func (r *runner) run(pass *analysis.Pass) (any, error) {
 	r.pass = pass
 
-	if r.c.GlobalTagsDenied == "" && len(r.c.Pkg) == 0 && len(r.c.PkgPath) == 0 {
+	if r.setting.GlobalTagsDenied == "" && len(r.setting.Pkg) == 0 && len(r.setting.PkgPath) == 0 {
 		return nil, nil
 	}
 
@@ -103,17 +103,17 @@ func (r *runner) run(pass *analysis.Pass) (any, error) {
 		return nil, nil
 	}
 
-	tagsToCheck := splitTags(r.c.GlobalTagsDenied)
+	tagsToCheck := splitTags(r.setting.GlobalTagsDenied)
 
 	pkgName := pass.Pkg.Name()
 
-	if tags, found := r.c.Pkg[pkgName]; found {
+	if tags, found := r.setting.Pkg[pkgName]; found {
 		tagsToCheck = append(tagsToCheck, splitTags(tags)...)
 	}
 
 	pkgPath := pass.Pkg.Path()
 
-	if tags, found := r.c.PkgPath[pkgPath]; found {
+	if tags, found := r.setting.PkgPath[pkgPath]; found {
 		tagsToCheck = append(tagsToCheck, splitTags(tags)...)
 	}
 
