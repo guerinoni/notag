@@ -86,7 +86,7 @@ type runner struct {
 	pass *analysis.Pass
 }
 
-func (r *runner) run(pass *analysis.Pass) (interface{}, error) {
+func (r *runner) run(pass *analysis.Pass) (any, error) {
 	r.pass = pass
 
 	if r.c.GlobalTagsDenied == "" && len(r.c.Pkg) == 0 {
