@@ -22,9 +22,11 @@ func NewAnalyzer() *analysis.Analyzer {
 	}
 
 	r.c.Pkg = make(pkgDenyMap)
+	r.c.PkgPath = make(pkgDenyMap)
 
 	a.Flags.StringVar(&r.c.GlobalTagsDenied, "denied", "", "comma-separated list of tags that are not allowed globally")
 	a.Flags.Var(&r.c.Pkg, "denied-pkg", "Per-package denied tags, format: pkg:tag1,tag2")
+	a.Flags.Var(&r.c.PkgPath, "denied-pkg-path", "Per-package path denied tags, format: pkg_path:tag1,tag2")
 
 	return a
 }
@@ -78,7 +80,10 @@ func (p *pkgDenyMap) Set(value string) error {
 
 type config struct {
 	GlobalTagsDenied string
-	Pkg              pkgDenyMap
+	// Pkg is a map where the key is the package name and the value is a comma-separated list of denied tags.
+	Pkg pkgDenyMap
+	// PkgPath is the map using the full path of the package as the key.
+	PkgPath pkgDenyMap
 }
 
 type runner struct {
@@ -89,7 +94,7 @@ type runner struct {
 func (r *runner) run(pass *analysis.Pass) (any, error) {
 	r.pass = pass
 
-	if r.c.GlobalTagsDenied == "" && len(r.c.Pkg) == 0 {
+	if r.c.GlobalTagsDenied == "" && len(r.c.Pkg) == 0 && len(r.c.PkgPath) == 0 {
 		return nil, nil
 	}
 
@@ -100,11 +105,16 @@ func (r *runner) run(pass *analysis.Pass) (any, error) {
 
 	tagsToCheck := splitTags(r.c.GlobalTagsDenied)
 
-	if len(r.c.Pkg) > 0 {
-		pkgName := pass.Pkg.Name()
-		if tags, found := r.c.Pkg[pkgName]; found {
-			tagsToCheck = append(tagsToCheck, splitTags(tags)...)
-		}
+	pkgName := pass.Pkg.Name()
+
+	if tags, found := r.c.Pkg[pkgName]; found {
+		tagsToCheck = append(tagsToCheck, splitTags(tags)...)
+	}
+
+	pkgPath := pass.Pkg.Path()
+
+	if tags, found := r.c.PkgPath[pkgPath]; found {
+		tagsToCheck = append(tagsToCheck, splitTags(tags)...)
 	}
 
 	inspector.Preorder(r.filters(), func(node ast.Node) {
