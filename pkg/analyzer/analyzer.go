@@ -132,7 +132,7 @@ func splitTags(tags string) []string {
 	}
 
 	var result []string
-	for _, tag := range strings.Split(tags, ",") {
+	for tag := range strings.SplitSeq(tags, ",") {
 		tag = strings.TrimSpace(tag)
 		if tag != "" {
 			result = append(result, tag)
