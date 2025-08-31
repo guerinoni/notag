@@ -160,8 +160,8 @@ func splitTags(tags string) []string {
 	return result
 }
 
-func containsTags(tags []string, n *ast.StructType) (string, string, bool) {
-	if len(tags) == 0 {
+func containsTags(deniedTags []string, n *ast.StructType) (string, string, bool) {
+	if len(deniedTags) == 0 {
 		return "", "", false
 	}
 
@@ -171,9 +171,14 @@ func containsTags(tags []string, n *ast.StructType) (string, string, bool) {
 		}
 
 		tagsFailed := []string{}
-		for _, denied := range tags {
-			if strings.Contains(field.Tag.Value, denied) {
-				tagsFailed = append(tagsFailed, denied)
+
+		tags := extractTagsFromString(field.Tag.Value)
+
+		for _, denied := range deniedTags {
+			for i := range tags {
+				if denied == tags[i] {
+					tagsFailed = append(tagsFailed, denied)
+				}
 			}
 		}
 
@@ -183,4 +188,31 @@ func containsTags(tags []string, n *ast.StructType) (string, string, bool) {
 	}
 
 	return "", "", false
+}
+
+// extractTagsFromString returns only the tags present in the string of tags of a struct.
+// Example: `json:"name"` -> json.
+// Example: `db:"name"` -> db.
+// Example: `json:"name"    xml:"Name"` -> json, xml.
+func extractTagsFromString(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+
+	var result []string
+
+	for _, tagAndValue := range strings.Split(s, " ") {
+		tagAndValue = strings.TrimSpace(tagAndValue)
+
+		v := strings.Split(tagAndValue, ":")
+		if len(v) == 2 {
+			t := strings.TrimSpace(v[0])
+			t = strings.Trim(t, "`")
+			result = append(result, t)
+		}
+	}
+
+	slices.Sort(result)
+
+	return result
 }
