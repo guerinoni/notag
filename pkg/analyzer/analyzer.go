@@ -1,8 +1,10 @@
+// Package analyzer provides a static analysis tool to warn about the usage of specific struct tags in Go code.
 package analyzer
 
 import (
 	"fmt"
 	"go/ast"
+	"slices"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
@@ -35,6 +37,7 @@ func NewAnalyzer() *analysis.Analyzer {
 // This is useful for testing purposes, allowing you to pass a specific configuration.
 func NewAnalyzerWithConfig(c Setting) *analysis.Analyzer {
 	var r runner
+
 	r.setting = c
 
 	a := &analysis.Analyzer{
@@ -54,14 +57,17 @@ func (p *pkgDenyMap) String() string {
 		return ""
 	}
 
-	var result []string
+	result := make([]string, 0, len(*p))
+
 	for pkg, tags := range *p {
 		tags = strings.TrimSpace(tags)
 		if tags == "" {
 			continue
 		}
+
 		result = append(result, fmt.Sprintf("%s:%s", pkg, tags))
 	}
+
 	return strings.Join(result, ",")
 }
 
@@ -75,6 +81,7 @@ func (p *pkgDenyMap) Set(value string) error {
 	tags := parts[1]
 
 	(*p)[pkg] = tags
+
 	return nil
 }
 
@@ -87,8 +94,8 @@ type Setting struct {
 }
 
 type runner struct {
-	setting    Setting
-	pass *analysis.Pass
+	setting Setting
+	pass    *analysis.Pass
 }
 
 func (r *runner) run(pass *analysis.Pass) (any, error) {
@@ -98,7 +105,7 @@ func (r *runner) run(pass *analysis.Pass) (any, error) {
 		return nil, nil
 	}
 
-	inspector, ok := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+	insp, ok := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	if !ok {
 		return nil, nil
 	}
@@ -117,7 +124,7 @@ func (r *runner) run(pass *analysis.Pass) (any, error) {
 		tagsToCheck = append(tagsToCheck, splitTags(tags)...)
 	}
 
-	inspector.Preorder(r.filters(), func(node ast.Node) {
+	insp.Preorder(r.filters(), func(node ast.Node) {
 		switch node := node.(type) {
 		case *ast.StructType:
 			fieldAffected, tagFailed, found := containsTags(tagsToCheck, node)
@@ -142,6 +149,7 @@ func splitTags(tags string) []string {
 	}
 
 	var result []string
+
 	for _, tag := range strings.Split(tags, ",") {
 		tag = strings.TrimSpace(tag)
 		if tag != "" {

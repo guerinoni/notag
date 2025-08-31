@@ -1,4 +1,4 @@
-package globally 
+package globally
 
 type ExampleNoTags struct {
 	Name string

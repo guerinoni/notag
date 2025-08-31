@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/guerinoni/notag/pkg/analyzer"
-
 	"golang.org/x/tools/go/analysis/singlechecker"
+
+	"github.com/guerinoni/notag/pkg/analyzer"
 )
 
 func main() {

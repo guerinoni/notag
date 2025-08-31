@@ -1,6 +1,5 @@
 package tags
 
 type Example struct {
-	Name string `json:"name"` 
+	Name string `json:"name"`
 }
-
