@@ -26,7 +26,7 @@ This prevents confusion and enforces architectural boundaries, saving debugging 
                     │
                     ▼
 ┌─────────────────────────────────────────┐
-│         Business Logic Layer           │
+│         Business Logic Layer            │
 │  ┌─────────────────────────────────────┐│
 │  │ type User struct {                  ││  ❌ notag catches this!
 │  │     Name  string `json:"name"`      ││
