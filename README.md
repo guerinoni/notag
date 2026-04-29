@@ -55,9 +55,9 @@ For each Go package the analyzer visits, `notag`:
 
 1. Computes the set of denied tag keys by combining `-denied` (global) with any `-denied-pkg` entry whose key matches the package **name** and any `-denied-pkg-path` entry whose key matches the package **import path**.
 2. Walks every `struct` literal, including nested anonymous structs and embedded fields.
-3. Extracts the tag keys from each field's struct tag using a `reflect.StructTag`-style parser.
+3. Extracts the tag keys and values from each field's struct tag using a `reflect.StructTag`-style parser.
 4. Skips files marked as generated (`// Code generated ... DO NOT EDIT.`); pass `-include-generated` to override.
-5. Reports each field whose tag declares any denied key.
+5. Reports each field whose tag declares any denied key — unless that key's value matches an `-allow key=value` exemption.
 
 The diagnostic is positioned on the offending field, not on the enclosing struct, so editors and CI annotations point at the exact line:
 
@@ -106,6 +106,20 @@ By default `notag` ignores files whose first comment matches the standard `// Co
 ```zsh
 notag -include-generated -denied json ./...
 ```
+
+### Allow specific values
+
+Sometimes a denied key has a legitimate "off-switch" value you still want to permit — most commonly `json:"-"`, the explicit skip-serialization marker. Use `-allow key=value` (repeatable) to exempt those exact values from the deny:
+
+```zsh
+# Deny json everywhere, but allow json:"-" as an explicit skip marker
+notag -denied json -allow json=- ./...
+
+# Multiple allowed values for the same key
+notag -denied json -allow json=- -allow json=ignore ./...
+```
+
+The match is exact: `-allow json=-` exempts `json:"-"` but does **not** exempt `json:"-,omitempty"`. Keys with no allow entry behave as before.
 
 ### Combining sources
 
@@ -183,6 +197,9 @@ func main() {
         PkgPath: analyzer.PkgDenyMap{
             "github.com/org/be/internal/domain": []string{"json", "xml"},
         },
+        Allow: analyzer.AllowValues{
+            "json": []string{"-"},
+        },
     })
     singlechecker.Main(a)
 }
@@ -199,3 +216,4 @@ func main() {
 - [x] Multi-name fields (`A, B string \`json:"x"\``) reported per identifier
 - [x] Robust struct-tag parsing (tab separators, escaped quotes)
 - [x] Skip generated files by default, opt back in with `-include-generated`
+- [x] Allow specific tag values (`-allow json=-`) to bypass an otherwise-denied key
