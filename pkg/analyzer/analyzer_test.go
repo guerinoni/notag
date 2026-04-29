@@ -139,6 +139,19 @@ func TestDedup(t *testing.T) {
 	}
 }
 
+func TestConfigPkgPath(t *testing.T) {
+	c := Setting{
+		PkgPath: pkgDenyMap{
+			"globally": "json,xml",
+		},
+	}
+
+	td := analysistest.TestData()
+	a := NewAnalyzerWithConfig(c)
+
+	analysistest.Run(t, td, a, "globally")
+}
+
 func TestExtractTagsFromString(t *testing.T) {
 	tests := []struct {
 		input    string
