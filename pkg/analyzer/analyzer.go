@@ -148,7 +148,7 @@ func inspectStruct(pass *analysis.Pass, tagsToCheck []string, node ast.Node) {
 			continue
 		}
 
-		pass.Reportf(node.Pos(), "field '%s' contains denied tags: '%s'", fieldName(field), strings.Join(failed, ","))
+		pass.Reportf(field.Pos(), "field '%s' contains denied tags: '%s'", fieldName(field), strings.Join(failed, ","))
 	}
 }
 

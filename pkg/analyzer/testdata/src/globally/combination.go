@@ -1,5 +1,5 @@
 package globally
 
-type Both struct { // want "field 'Name' contains denied tags: 'json,xml'"
-	Name string `xml:"name" json:"name"`
+type Both struct {
+	Name string `xml:"name" json:"name"` // want "field 'Name' contains denied tags: 'json,xml'"
 }

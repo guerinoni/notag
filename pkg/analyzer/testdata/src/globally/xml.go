@@ -1,5 +1,5 @@
 package globally
 
-type ExampleXML struct { // want "field 'Name' contains denied tags: 'xml'"
-	Name string `xml:"name"`
+type ExampleXML struct {
+	Name string `xml:"name"` // want "field 'Name' contains denied tags: 'xml'"
 }

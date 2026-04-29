@@ -1,5 +1,5 @@
 package globally
 
-type Example struct { // want "field 'Name' contains denied tags: 'json'"
-	Name string `json:"name"`
+type Example struct {
+	Name string `json:"name"` // want "field 'Name' contains denied tags: 'json'"
 }
