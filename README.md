@@ -142,6 +142,19 @@ Multiple denied keys on the same field are reported once per field, joined by co
 field 'Name' contains denied tags: 'json,xml'
 ```
 
+Fields declared with multiple names share their tag in Go, so each identifier is reported separately:
+
+```go
+type T struct {
+    A, B string `json:"shared"`
+}
+```
+
+```
+t.go:2:2: field 'A' contains denied tags: 'json'
+t.go:2:2: field 'B' contains denied tags: 'json'
+```
+
 ## Programmatic use
 
 If you embed `notag` in a custom analyzer driver, build the analyzer with explicit configuration instead of CLI flags:
@@ -174,4 +187,5 @@ func main() {
 - [x] Combine global + per-package directives
 - [x] Multiple tag support, deduped across sources
 - [x] Embedded fields and nested anonymous structs
+- [x] Multi-name fields (`A, B string \`json:"x"\``) reported per identifier
 - [x] Robust struct-tag parsing (tab separators, escaped quotes)

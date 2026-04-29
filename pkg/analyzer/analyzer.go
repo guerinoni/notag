@@ -156,20 +156,27 @@ func inspectStruct(pass *analysis.Pass, tagsToCheck []string, node ast.Node) {
 			continue
 		}
 
-		pass.Reportf(field.Pos(), "field '%s' contains denied tags: '%s'", fieldName(field), strings.Join(failed, ","))
+		for _, name := range fieldNames(field) {
+			pass.Reportf(field.Pos(), "field '%s' contains denied tags: '%s'", name, strings.Join(failed, ","))
+		}
 	}
 }
 
-func fieldName(field *ast.Field) string {
+func fieldNames(field *ast.Field) []string {
 	if len(field.Names) > 0 {
-		return field.Names[0].Name
+		out := make([]string, len(field.Names))
+		for i, n := range field.Names {
+			out[i] = n.Name
+		}
+
+		return out
 	}
 
 	if id, ok := field.Type.(*ast.Ident); ok {
-		return id.Name
+		return []string{id.Name}
 	}
 
-	return "<embedded>"
+	return []string{"<embedded>"}
 }
 
 func matchedTags(denied []string, tagStr string) []string {
