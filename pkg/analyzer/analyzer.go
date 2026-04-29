@@ -14,17 +14,14 @@ import (
 
 // NewAnalyzer creates a new instance of the analyzer with default configuration.
 func NewAnalyzer() *analysis.Analyzer {
-	var r runner
-
-	a := &analysis.Analyzer{
-		Name:     "notag",
-		Doc:      "warns about specific tags used, or in a specific pkg",
-		Run:      r.run,
-		Requires: []*analysis.Analyzer{inspect.Analyzer},
+	r := &runner{
+		setting: Setting{
+			Pkg:     make(pkgDenyMap),
+			PkgPath: make(pkgDenyMap),
+		},
 	}
 
-	r.setting.Pkg = make(pkgDenyMap)
-	r.setting.PkgPath = make(pkgDenyMap)
+	a := buildAnalyzer(r)
 
 	a.Flags.StringVar(&r.setting.GlobalTagsDenied, "denied", "", "comma-separated list of tags that are not allowed globally")
 	a.Flags.Var(&r.setting.Pkg, "denied-pkg", "Per-package denied tags, format: pkg:tag1,tag2")
@@ -36,18 +33,16 @@ func NewAnalyzer() *analysis.Analyzer {
 // NewAnalyzerWithConfig creates a new analyzer with the provided configuration.
 // This is useful for testing purposes, allowing you to pass a specific configuration.
 func NewAnalyzerWithConfig(c Setting) *analysis.Analyzer {
-	var r runner
+	return buildAnalyzer(&runner{setting: c})
+}
 
-	r.setting = c
-
-	a := &analysis.Analyzer{
+func buildAnalyzer(r *runner) *analysis.Analyzer {
+	return &analysis.Analyzer{
 		Name:     "notag",
 		Doc:      "warns about specific tags used, or in a specific pkg",
 		Run:      r.run,
 		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	}
-
-	return a
 }
 
 type pkgDenyMap map[string]string
@@ -72,15 +67,19 @@ func (p *pkgDenyMap) String() string {
 }
 
 func (p *pkgDenyMap) Set(value string) error {
-	parts := strings.Split(value, ":")
+	parts := strings.SplitN(value, ":", 2)
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid format for denied-pkg: %s, expected pkg:tag1,tag2", value)
 	}
 
 	pkg := strings.TrimSpace(parts[0])
-	tags := parts[1]
+	tags := strings.TrimSpace(parts[1])
 
-	(*p)[pkg] = tags
+	if existing, ok := (*p)[pkg]; ok && existing != "" {
+		(*p)[pkg] = existing + "," + tags
+	} else {
+		(*p)[pkg] = tags
+	}
 
 	return nil
 }
@@ -95,13 +94,11 @@ type Setting struct {
 
 type runner struct {
 	setting Setting
-	pass    *analysis.Pass
 }
 
 func (r *runner) run(pass *analysis.Pass) (any, error) {
-	r.pass = pass
-
-	if r.setting.GlobalTagsDenied == "" && len(r.setting.Pkg) == 0 && len(r.setting.PkgPath) == 0 {
+	tagsToCheck := r.tagsForPass(pass)
+	if len(tagsToCheck) == 0 {
 		return nil, nil
 	}
 
@@ -110,37 +107,80 @@ func (r *runner) run(pass *analysis.Pass) (any, error) {
 		return nil, nil
 	}
 
-	tagsToCheck := splitTags(r.setting.GlobalTagsDenied)
-
-	pkgName := pass.Pkg.Name()
-
-	if tags, found := r.setting.Pkg[pkgName]; found {
-		tagsToCheck = append(tagsToCheck, splitTags(tags)...)
-	}
-
-	pkgPath := pass.Pkg.Path()
-
-	if tags, found := r.setting.PkgPath[pkgPath]; found {
-		tagsToCheck = append(tagsToCheck, splitTags(tags)...)
-	}
-
-	insp.Preorder(r.filters(), func(node ast.Node) {
-		switch node := node.(type) {
-		case *ast.StructType:
-			fieldAffected, tagFailed, found := containsTags(tagsToCheck, node)
-			if found {
-				pass.Reportf(node.Pos(), "field '%s' contains denied tags: '%v'", fieldAffected, tagFailed)
-			}
-		default:
-			fmt.Println("Found a node of type:", fmt.Sprintf("%T", node))
-		}
+	insp.Preorder([]ast.Node{&ast.StructType{}}, func(node ast.Node) {
+		inspectStruct(pass, tagsToCheck, node)
 	})
 
 	return nil, nil
 }
 
-func (r *runner) filters() []ast.Node {
-	return []ast.Node{&ast.StructType{}}
+func (r *runner) tagsForPass(pass *analysis.Pass) []string {
+	if r.setting.GlobalTagsDenied == "" && len(r.setting.Pkg) == 0 && len(r.setting.PkgPath) == 0 {
+		return nil
+	}
+
+	tags := splitTags(r.setting.GlobalTagsDenied)
+
+	if extra, found := r.setting.Pkg[pass.Pkg.Name()]; found {
+		tags = append(tags, splitTags(extra)...)
+	}
+
+	if extra, found := r.setting.PkgPath[pass.Pkg.Path()]; found {
+		tags = append(tags, splitTags(extra)...)
+	}
+
+	return dedup(tags)
+}
+
+func inspectStruct(pass *analysis.Pass, tagsToCheck []string, node ast.Node) {
+	st, ok := node.(*ast.StructType)
+	if !ok || st.Fields == nil {
+		return
+	}
+
+	for _, field := range st.Fields.List {
+		if field.Tag == nil {
+			continue
+		}
+
+		failed := matchedTags(tagsToCheck, field.Tag.Value)
+		if len(failed) == 0 {
+			continue
+		}
+
+		pass.Reportf(node.Pos(), "field '%s' contains denied tags: '%s'", fieldName(field), strings.Join(failed, ","))
+
+		return
+	}
+}
+
+func fieldName(field *ast.Field) string {
+	if len(field.Names) > 0 {
+		return field.Names[0].Name
+	}
+
+	if id, ok := field.Type.(*ast.Ident); ok {
+		return id.Name
+	}
+
+	return "<embedded>"
+}
+
+func matchedTags(denied []string, tagStr string) []string {
+	tags := extractTagsFromString(tagStr)
+	if len(tags) == 0 {
+		return nil
+	}
+
+	var out []string
+
+	for _, d := range denied {
+		if slices.Contains(tags, d) {
+			out = append(out, d)
+		}
+	}
+
+	return out
 }
 
 func splitTags(tags string) []string {
@@ -160,59 +200,108 @@ func splitTags(tags string) []string {
 	return result
 }
 
-func containsTags(deniedTags []string, n *ast.StructType) (string, string, bool) {
-	if len(deniedTags) == 0 {
-		return "", "", false
+func dedup(in []string) []string {
+	if len(in) <= 1 {
+		return in
 	}
 
-	for _, field := range n.Fields.List {
-		if field.Tag == nil {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+
+	for _, v := range in {
+		if _, ok := seen[v]; ok {
 			continue
 		}
 
-		tagsFailed := []string{}
+		seen[v] = struct{}{}
 
-		tags := extractTagsFromString(field.Tag.Value)
-
-		for _, denied := range deniedTags {
-			for i := range tags {
-				if denied == tags[i] {
-					tagsFailed = append(tagsFailed, denied)
-				}
-			}
-		}
-
-		if len(tagsFailed) > 0 {
-			return field.Names[0].Name, strings.Join(tagsFailed, ","), true
-		}
+		out = append(out, v)
 	}
 
-	return "", "", false
+	return out
 }
 
-// extractTagsFromString returns only the tags present in the string of tags of a struct.
-// Example: `json:"name"` -> json.
-// Example: `db:"name"` -> db.
-// Example: `json:"name"    xml:"Name"` -> json, xml.
+// extractTagsFromString returns the tag keys present in a struct tag string.
+// It mirrors the parsing rules of reflect.StructTag, handling tab/space separators
+// and quoted values that may contain whitespace or escaped quotes.
+// Example: `json:"name"` -> [json].
+// Example: `json:"name,omitempty" xml:"Name"` -> [json, xml].
 func extractTagsFromString(s string) []string {
+	s = strings.Trim(s, "`")
 	if s == "" {
 		return []string{}
 	}
 
-	var result []string
+	var keys []string
 
-	for _, tagAndValue := range strings.Split(s, " ") {
-		tagAndValue = strings.TrimSpace(tagAndValue)
-
-		v := strings.Split(tagAndValue, ":")
-		if len(v) == 2 {
-			t := strings.TrimSpace(v[0])
-			t = strings.Trim(t, "`")
-			result = append(result, t)
+	for s != "" {
+		s = trimTagSpace(s)
+		if s == "" {
+			break
 		}
+
+		key, rest, ok := nextTagKey(s)
+		if !ok {
+			break
+		}
+
+		rest, ok = skipTagValue(rest)
+		if !ok {
+			break
+		}
+
+		keys = append(keys, key)
+		s = rest
 	}
 
-	slices.Sort(result)
+	slices.Sort(keys)
 
-	return result
+	if keys == nil {
+		return []string{}
+	}
+
+	return keys
+}
+
+func trimTagSpace(s string) string {
+	i := 0
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+
+	return s[i:]
+}
+
+func nextTagKey(s string) (string, string, bool) {
+	i := 0
+	for i < len(s) && s[i] > ' ' && s[i] != ':' && s[i] != '"' && s[i] != 0x7f {
+		i++
+	}
+
+	if i == 0 || i >= len(s) || s[i] != ':' {
+		return "", s, false
+	}
+
+	return s[:i], s[i+1:], true
+}
+
+func skipTagValue(s string) (string, bool) {
+	if s == "" || s[0] != '"' {
+		return s, false
+	}
+
+	i := 1
+	for i < len(s) && s[i] != '"' {
+		if s[i] == '\\' {
+			i++
+		}
+
+		i++
+	}
+
+	if i >= len(s) {
+		return s, false
+	}
+
+	return s[i+1:], true
 }

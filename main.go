@@ -1,3 +1,4 @@
+// Package main provides the notag analyzer entry point.
 package main
 
 import (
