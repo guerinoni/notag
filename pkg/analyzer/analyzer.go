@@ -284,7 +284,7 @@ func extractTagsFromString(s string) []string {
 
 func trimTagSpace(s string) string {
 	i := 0
-	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
 		i++
 	}
 
