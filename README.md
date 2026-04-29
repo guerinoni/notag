@@ -55,8 +55,9 @@ For each Go package the analyzer visits, `notag`:
 
 1. Computes the set of denied tag keys by combining `-denied` (global) with any `-denied-pkg` entry whose key matches the package **name** and any `-denied-pkg-path` entry whose key matches the package **import path**.
 2. Walks every `struct` literal, including nested anonymous structs and embedded fields.
-3. Extracts the tag keys from each field's struct tag using a `reflect.StructTag`-style parser
-4. Reports each field whose tag declares any denied key.
+3. Extracts the tag keys from each field's struct tag using a `reflect.StructTag`-style parser.
+4. Skips files marked as generated (`// Code generated ... DO NOT EDIT.`); pass `-include-generated` to override.
+5. Reports each field whose tag declares any denied key.
 
 The diagnostic is positioned on the offending field, not on the enclosing struct, so editors and CI annotations point at the exact line:
 
@@ -96,6 +97,14 @@ The key matches `pass.Pkg.Path()` — the full import path. Use this when severa
 
 ```zsh
 notag -denied-pkg-path github.com/guerinoni/notag/internal/domain:json,xml ./...
+```
+
+### Generated files
+
+By default `notag` ignores files whose first comment matches the standard `// Code generated ... DO NOT EDIT.` pattern, since you can't reasonably edit them by hand. If you generate the file yourself and want the same rules enforced, opt back in:
+
+```zsh
+notag -include-generated -denied json ./...
 ```
 
 ### Combining sources
@@ -189,3 +198,4 @@ func main() {
 - [x] Embedded fields and nested anonymous structs
 - [x] Multi-name fields (`A, B string \`json:"x"\``) reported per identifier
 - [x] Robust struct-tag parsing (tab separators, escaped quotes)
+- [x] Skip generated files by default, opt back in with `-include-generated`
