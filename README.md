@@ -1,17 +1,12 @@
 # notag
 
-A tiny Go linter that ensures specific struct tags are not used globally or in designated packages.
+A tiny Go linter that flags struct tags you don't want used globally, in a specific package by name, or in a specific package by import path.
 
-## Why Use notag?
+`notag` is built on top of `golang.org/x/tools/go/analysis`, so it plugs into anything that speaks the standard analyzer protocol (e.g. `singlechecker`, custom drivers).
 
-Your project, your rules! 
+## Why use notag?
 
-But seriously, it's incredibly useful for maintaining clean architecture. For example, when you have:
-- **Controller/API layer** → JSON tags belong here for request/response structs
-- **Business logic layer** → No JSON tags needed, keeps internal structs clean
-- **Data layer** → Different serialization needs
-
-This prevents confusion and enforces architectural boundaries, saving debugging time and maintaining code clarity.
+Different layers of an application have different serialization needs. JSON tags belong in the layer that talks to clients; database tags belong in the persistence layer; the domain layer in between should generally not carry either. `notag` lets you encode that boundary as a lint rule instead of relying on review discipline.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -50,59 +45,133 @@ This prevents confusion and enforces architectural boundaries, saving debugging 
 
 ## Installation
 
-```bash
+```zsh
 go install github.com/guerinoni/notag@latest
+```
+
+## How it works
+
+For each Go package the analyzer visits, `notag`:
+
+1. Computes the set of denied tag keys by combining `-denied` (global) with any `-denied-pkg` entry whose key matches the package **name** and any `-denied-pkg-path` entry whose key matches the package **import path**.
+2. Walks every `struct` literal, including nested anonymous structs and embedded fields.
+3. Extracts the tag keys from each field's struct tag using a `reflect.StructTag`-style parser
+4. Reports each field whose tag declares any denied key.
+
+The diagnostic is positioned on the offending field, not on the enclosing struct, so editors and CI annotations point at the exact line:
+
+```
+internal/domain/user.go:7:2: field 'Name' contains denied tags: 'json'
 ```
 
 ## Usage
 
-### Package-specific Tag Restrictions
-```bash
-# Warn if JSON tags are found in the "service" package
+### Global denial
+
+```zsh
+# Deny `validate` and `xml` everywhere
+notag -denied validate,xml ./...
+```
+
+### By package name
+
+The key matches `pass.Pkg.Name()` — the bare package name as it appears in the `package` clause.
+
+```zsh
+# In the "service" package, deny `json`
 notag -denied-pkg service:json ./...
 
-# Multiple packages with different restrictions
+# Multiple flag uses are appended (different keys are independent)
 notag -denied-pkg service:json -denied-pkg repository:xml ./...
+
+# Repeating the same key also appends
+notag -denied-pkg service:json -denied-pkg service:xml ./...
+# equivalent to:
+notag -denied-pkg service:json,xml ./...
 ```
 
-### Package Path-based Restrictions
-```bash
-# Deny XML tags in the "repository" package
-notag -denied-pkg-path github.com/guerinoni/notag/analyzer:xml ./...
+### By package import path
+
+The key matches `pass.Pkg.Path()` — the full import path. Use this when several packages in the project share a name.
+
+```zsh
+notag -denied-pkg-path github.com/guerinoni/notag/internal/domain:json,xml ./...
 ```
 
-### Global Tag Restrictions
-```bash
-# Deny validate and xml tags globally across all packages
-notag -denied validate,xml ./...
+### Combining sources
 
-# Combine global and package-specific rules
-notag -denied validate -denied-pkg service:json ./...
+All three sources are merged for each package the analyzer visits, deduplicated, then matched.
+
+```zsh
+notag \
+  -denied db \
+  -denied-pkg service:json \
+  -denied-pkg-path github.com/org/be/internal/controllers:xml \
+  ./...
 ```
 
-### All combination of restrictions
-```bash
-# This denys:
-# globally db tags,
-# in the "service" package: json tags,
-# in the "github.com/org/be/internal/controllers" package: xml tags
-notag --denied db --denied-pkg service:json --denied-pkg-path github.com/org/be/internal/controllers:xml ./...
+## Example
+
+Given:
+
+```go
+package domain
+
+type User struct {
+    Name  string `json:"name"`
+    Email string `xml:"email"`
+}
 ```
 
-## Benefits
+Running:
 
-Instead of littering your internal structs with `json:"-"` tags, `notag` encourages you to:
-- Keep API request/response structs in dedicated packages
-- Maintain clean internal domain models
-- Change serialization formats without touching business logic
-- Have explicit control over what gets exposed in your API
+```zsh
+notag -denied json,xml ./...
+```
+
+produces:
+
+```
+domain/user.go:4:2: field 'Name' contains denied tags: 'json'
+domain/user.go:5:2: field 'Email' contains denied tags: 'xml'
+```
+
+Multiple denied keys on the same field are reported once per field, joined by comma:
+
+```
+field 'Name' contains denied tags: 'json,xml'
+```
+
+## Programmatic use
+
+If you embed `notag` in a custom analyzer driver, build the analyzer with explicit configuration instead of CLI flags:
+
+```go
+import (
+    "github.com/guerinoni/notag/pkg/analyzer"
+    "golang.org/x/tools/go/analysis/singlechecker"
+)
+
+func main() {
+    a := analyzer.NewAnalyzerWithConfig(analyzer.Setting{
+        GlobalTagsDenied: "validate",
+        Pkg: analyzer.PkgDenyMap{
+            "service": []string{"json"},
+        },
+        PkgPath: analyzer.PkgDenyMap{
+            "github.com/org/be/internal/domain": []string{"json", "xml"},
+        },
+    })
+    singlechecker.Main(a)
+}
+```
 
 ## Features
 
 - [x] Global tag restrictions
-- [x] Package-specific tag restrictions
-- [x] Combine global + pkg specific directive
-- [x] Multiple tag support
+- [x] Package-specific tag restrictions (by name)
 - [x] Package path-based restrictions
-- [ ] Find in nested structs (coming soon)
-
+- [x] Combine global + per-package directives
+- [x] Multiple tag support, deduped across sources
+- [x] Embedded fields and nested anonymous structs
+- [x] Robust struct-tag parsing (tab separators, escaped quotes)
