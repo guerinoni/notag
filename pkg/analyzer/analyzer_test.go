@@ -84,6 +84,8 @@ func TestExtractTagsFromString(t *testing.T) {
 		{`json:"name" xml:"Name"`, []string{"json", "xml"}},
 		{`db:"name" xml:"Name"`, []string{"db", "xml"}},
 		{`json:"name"`, []string{"json"}},
+		{"json:\"name\"\txml:\"Name\"", []string{"json", "xml"}},
+		{`json:"a\"b" xml:"name"`, []string{"json", "xml"}},
 		{``, []string{}},
 	}
 
