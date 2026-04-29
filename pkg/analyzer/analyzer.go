@@ -16,8 +16,8 @@ import (
 func NewAnalyzer() *analysis.Analyzer {
 	r := &runner{
 		setting: Setting{
-			Pkg:     make(pkgDenyMap),
-			PkgPath: make(pkgDenyMap),
+			Pkg:     make(PkgDenyMap),
+			PkgPath: make(PkgDenyMap),
 		},
 	}
 
@@ -45,9 +45,11 @@ func buildAnalyzer(r *runner) *analysis.Analyzer {
 	}
 }
 
-type pkgDenyMap map[string]string
+// PkgDenyMap maps a package identifier (name or import path) to its denied tag keys.
+type PkgDenyMap map[string][]string
 
-func (p *pkgDenyMap) String() string {
+// String renders the map in the deterministic flag form `pkg:tag1,tag2;pkg2:tag3`.
+func (p *PkgDenyMap) String() string {
 	if p == nil {
 		return ""
 	}
@@ -63,41 +65,42 @@ func (p *pkgDenyMap) String() string {
 	result := make([]string, 0, len(keys))
 
 	for _, pkg := range keys {
-		tags := strings.TrimSpace((*p)[pkg])
-		if tags == "" {
+		tags := (*p)[pkg]
+		if len(tags) == 0 {
 			continue
 		}
 
-		result = append(result, fmt.Sprintf("%s:%s", pkg, tags))
+		result = append(result, fmt.Sprintf("%s:%s", pkg, strings.Join(tags, ",")))
 	}
 
-	return strings.Join(result, ",")
+	return strings.Join(result, ";")
 }
 
-func (p *pkgDenyMap) Set(value string) error {
+// Set parses a `pkg:tag1,tag2` flag value. Repeated calls for the same key append.
+func (p *PkgDenyMap) Set(value string) error {
 	parts := strings.SplitN(value, ":", 2)
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid format for denied-pkg: %s, expected pkg:tag1,tag2", value)
 	}
 
 	pkg := strings.TrimSpace(parts[0])
-	tags := strings.TrimSpace(parts[1])
 
-	if existing, ok := (*p)[pkg]; ok && existing != "" {
-		(*p)[pkg] = existing + "," + tags
-	} else {
-		(*p)[pkg] = tags
+	tags := splitTags(parts[1])
+	if len(tags) == 0 {
+		return nil
 	}
+
+	(*p)[pkg] = append((*p)[pkg], tags...)
 
 	return nil
 }
 
 type Setting struct {
 	GlobalTagsDenied string
-	// Pkg is a map where the key is the package name and the value is a comma-separated list of denied tags.
-	Pkg pkgDenyMap
-	// PkgPath is the map using the full path of the package as the key.
-	PkgPath pkgDenyMap
+	// Pkg is keyed by package name (pass.Pkg.Name()).
+	Pkg PkgDenyMap
+	// PkgPath is keyed by full import path (pass.Pkg.Path()).
+	PkgPath PkgDenyMap
 }
 
 type runner struct {
@@ -130,11 +133,11 @@ func (r *runner) tagsForPass(pass *analysis.Pass) []string {
 	tags := splitTags(r.setting.GlobalTagsDenied)
 
 	if extra, found := r.setting.Pkg[pass.Pkg.Name()]; found {
-		tags = append(tags, splitTags(extra)...)
+		tags = append(tags, extra...)
 	}
 
 	if extra, found := r.setting.PkgPath[pass.Pkg.Path()]; found {
-		tags = append(tags, splitTags(extra)...)
+		tags = append(tags, extra...)
 	}
 
 	return dedup(tags)

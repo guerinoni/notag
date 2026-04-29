@@ -26,8 +26,8 @@ func TestConfigGloballyDenied(t *testing.T) {
 func TestConfigSpecificPkg(t *testing.T) {
 	{
 		c := Setting{
-			Pkg: pkgDenyMap{
-				"globally": "json,xml",
+			Pkg: PkgDenyMap{
+				"globally": []string{"json", "xml"},
 			},
 		}
 
@@ -38,8 +38,8 @@ func TestConfigSpecificPkg(t *testing.T) {
 	}
 	{
 		c := Setting{
-			Pkg: pkgDenyMap{
-				"globally": "json,xml",
+			Pkg: PkgDenyMap{
+				"globally": []string{"json", "xml"},
 			},
 		}
 
@@ -50,8 +50,8 @@ func TestConfigSpecificPkg(t *testing.T) {
 	}
 	{
 		c := Setting{
-			Pkg: pkgDenyMap{
-				"globally": "json,xml",
+			Pkg: PkgDenyMap{
+				"globally": []string{"json", "xml"},
 			},
 		}
 
@@ -62,8 +62,8 @@ func TestConfigSpecificPkg(t *testing.T) {
 	}
 	{
 		c := Setting{
-			Pkg: pkgDenyMap{
-				"globally": "db",
+			Pkg: PkgDenyMap{
+				"globally": []string{"db"},
 			},
 		}
 
@@ -76,39 +76,42 @@ func TestConfigSpecificPkg(t *testing.T) {
 
 func TestPkgDenyMapSet(t *testing.T) {
 	t.Run("simple", func(t *testing.T) {
-		m := pkgDenyMap{}
+		m := PkgDenyMap{}
 		if err := m.Set("svc:json,xml"); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 
-		if got := m["svc"]; got != "json,xml" {
-			t.Errorf("svc = %q; want json,xml", got)
+		want := []string{"json", "xml"}
+		if !reflect.DeepEqual(m["svc"], want) {
+			t.Errorf("svc = %v; want %v", m["svc"], want)
 		}
 	})
 
 	t.Run("repeat appends", func(t *testing.T) {
-		m := pkgDenyMap{}
+		m := PkgDenyMap{}
 		_ = m.Set("svc:json")
 		_ = m.Set("svc:xml")
 
-		if got := m["svc"]; got != "json,xml" {
-			t.Errorf("svc = %q; want json,xml", got)
+		want := []string{"json", "xml"}
+		if !reflect.DeepEqual(m["svc"], want) {
+			t.Errorf("svc = %v; want %v", m["svc"], want)
 		}
 	})
 
 	t.Run("path with colon preserved", func(t *testing.T) {
-		m := pkgDenyMap{}
+		m := PkgDenyMap{}
 		if err := m.Set("github.com/x/y:json"); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 
-		if got := m["github.com/x/y"]; got != "json" {
-			t.Errorf("got %q; want json", got)
+		want := []string{"json"}
+		if !reflect.DeepEqual(m["github.com/x/y"], want) {
+			t.Errorf("got %v; want %v", m["github.com/x/y"], want)
 		}
 	})
 
 	t.Run("invalid format", func(t *testing.T) {
-		m := pkgDenyMap{}
+		m := PkgDenyMap{}
 		if err := m.Set("bogus"); err == nil {
 			t.Error("expected err for missing colon")
 		}
@@ -116,14 +119,14 @@ func TestPkgDenyMapSet(t *testing.T) {
 }
 
 func TestPkgDenyMapStringDeterministic(t *testing.T) {
-	m := pkgDenyMap{
-		"b": "json",
-		"a": "xml",
-		"c": "db",
+	m := PkgDenyMap{
+		"b": []string{"json"},
+		"a": []string{"xml"},
+		"c": []string{"db"},
 	}
 
 	got := m.String()
-	want := "a:xml,b:json,c:db"
+	want := "a:xml;b:json;c:db"
 
 	if got != want {
 		t.Errorf("got %q; want %q", got, want)
@@ -141,8 +144,8 @@ func TestDedup(t *testing.T) {
 
 func TestConfigPkgPath(t *testing.T) {
 	c := Setting{
-		PkgPath: pkgDenyMap{
-			"globally": "json,xml",
+		PkgPath: PkgDenyMap{
+			"globally": []string{"json", "xml"},
 		},
 	}
 
