@@ -1,0 +1,108 @@
+version: "2"
+
+linters:
+  default: all
+
+  disable:
+    - nestif
+    - nonamedreturns
+    - testpackage
+    - tagliatelle
+    - noinlineerr
+    - depguard
+    - wrapcheck
+    - varnamelen
+    - paralleltest
+    - mnd
+    - lll
+    - godox
+    - interfacebloat
+    - nilnil
+    - gochecknoglobals
+    - funlen
+    - exhaustruct
+    - err113
+    - dupl
+    - errcheck
+    - dogsled
+    - wsl
+
+  exclusions:
+    warn-unused: true
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+
+  settings:
+    revive:
+      # Maximum number of open files at the same time.
+      # See https://github.com/mgechev/revive#command-line-flags
+      # Defaults to unlimited.
+      max-open-files: 2048
+      # Sets the default severity.
+      # See https://github.com/mgechev/revive#configuration
+      # Default: warning
+      severity: error
+      # Enable all available rules.
+      # Default: false
+      enable-all-rules: true
+      rules:
+        - name: exported
+          disabled: true
+        - name: receiver-naming
+          disabled: true
+        - name: unused-receiver
+          disabled: true
+        - name: line-length-limit
+          disabled: true
+        - name: add-constant
+          disabled: true
+        - name: max-public-structs
+          disabled: true
+        - name: cognitive-complexity
+          disabled: true
+        - name: function-result-limit
+          disabled: true
+        - name: argument-limit
+          disabled: true
+        - name: confusing-results
+          disabled: true
+        - name: function-length
+          disabled: true
+        - name: unchecked-type-assertion
+          disabled: true
+
+formatters:
+  enable:
+    - gofmt
+    - gci
+  settings:
+    gofmt:
+      # Simplify code: gofmt with `-s` option.
+      # Default: true
+      simplify: true
+      # Apply the rewrite rules to the source before reformatting.
+      # https://pkg.go.dev/cmd/gofmt
+      # Default: []
+      rewrite-rules:
+        - pattern: "interface{}"
+          replacement: "any"
+        - pattern: "a[b:len(a)]"
+          replacement: "a[b:]"
+
+    gci:
+      # Section configuration to compare against.
+      # Section names are case-insensitive and may contain parameters in ().
+      # The default order of sections is `standard > default > custom > blank > dot > alias > localmodule`,
+      # If `custom-order` is `true`, it follows the order of `sections` option.
+      # Default: ["standard", "default"]
+      sections:
+        - standard # Standard section: captures all standard packages.
+        - default # Default section: contains all imports that could not be matched to another section type.
+        - prefix(github.com/guerinoni/notag) # Custom section: groups all imports with the specified Prefix.
+        - blank # Blank section: contains all blank imports. This section is not present unless explicitly enabled.
+        - dot # Dot section: contains all dot imports. This section is not present unless explicitly enabled.
+        - alias # Alias section: contains all alias imports. This section is not present unless explicitly enabled.
+        - localmodule # Local module section: contains all local packages. This section is not present unless explicitly enabled.
+
