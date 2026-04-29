@@ -28,6 +28,7 @@ func NewAnalyzer() *analysis.Analyzer {
 	a.Flags.StringVar(&r.setting.GlobalTagsDenied, "denied", "", "comma-separated list of tags that are not allowed globally")
 	a.Flags.Var(&r.setting.Pkg, "denied-pkg", "Per-package denied tags, format: pkg:tag1,tag2")
 	a.Flags.Var(&r.setting.PkgPath, "denied-pkg-path", "Per-package path denied tags, format: pkg_path:tag1,tag2")
+	a.Flags.BoolVar(&r.setting.IncludeGenerated, "include-generated", false, "also analyze files marked as generated (default: skip)")
 
 	return a
 }
@@ -103,6 +104,9 @@ type Setting struct {
 	Pkg PkgDenyMap
 	// PkgPath is keyed by full import path (pass.Pkg.Path()).
 	PkgPath PkgDenyMap
+	// IncludeGenerated, when true, analyzes files marked as generated.
+	// Default (false) skips them.
+	IncludeGenerated bool
 }
 
 type runner struct {
@@ -117,7 +121,10 @@ func (r *runner) run(pass *analysis.Pass) (any, error) {
 
 	insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector) //nolint:forcetypeassert // guaranteed by Requires
 
-	generated := generatedFiles(pass)
+	var generated map[*token.File]bool
+	if !r.setting.IncludeGenerated {
+		generated = generatedFiles(pass)
+	}
 
 	insp.Preorder([]ast.Node{&ast.StructType{}}, func(node ast.Node) {
 		if generated[pass.Fset.File(node.Pos())] {

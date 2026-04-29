@@ -142,6 +142,18 @@ func TestDedup(t *testing.T) {
 	}
 }
 
+func TestIncludeGenerated(t *testing.T) {
+	c := Setting{
+		GlobalTagsDenied: "json",
+		IncludeGenerated: true,
+	}
+
+	td := analysistest.TestData()
+	a := NewAnalyzerWithConfig(c)
+
+	analysistest.Run(t, td, a, "genon")
+}
+
 func TestConfigPkgPath(t *testing.T) {
 	c := Setting{
 		PkgPath: PkgDenyMap{
