@@ -4,6 +4,7 @@ package analyzer
 import (
 	"fmt"
 	"go/ast"
+	"go/token"
 	"slices"
 	"strconv"
 	"strings"
@@ -116,11 +117,33 @@ func (r *runner) run(pass *analysis.Pass) (any, error) {
 
 	insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector) //nolint:forcetypeassert // guaranteed by Requires
 
+	generated := generatedFiles(pass)
+
 	insp.Preorder([]ast.Node{&ast.StructType{}}, func(node ast.Node) {
+		if generated[pass.Fset.File(node.Pos())] {
+			return
+		}
+
 		inspectStruct(pass, tagsToCheck, node)
 	})
 
 	return nil, nil
+}
+
+func generatedFiles(pass *analysis.Pass) map[*token.File]bool {
+	out := map[*token.File]bool{}
+
+	for _, f := range pass.Files {
+		if !ast.IsGenerated(f) {
+			continue
+		}
+
+		if tf := pass.Fset.File(f.Pos()); tf != nil {
+			out[tf] = true
+		}
+	}
+
+	return out
 }
 
 func (r *runner) tagsForPass(pass *analysis.Pass) []string {
