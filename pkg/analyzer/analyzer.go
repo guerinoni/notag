@@ -113,10 +113,7 @@ func (r *runner) run(pass *analysis.Pass) (any, error) {
 		return nil, nil
 	}
 
-	insp, ok := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
-	if !ok {
-		return nil, nil
-	}
+	insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector) //nolint:forcetypeassert // guaranteed by Requires
 
 	insp.Preorder([]ast.Node{&ast.StructType{}}, func(node ast.Node) {
 		inspectStruct(pass, tagsToCheck, node)
