@@ -52,10 +52,18 @@ func (p *pkgDenyMap) String() string {
 		return ""
 	}
 
-	result := make([]string, 0, len(*p))
+	keys := make([]string, 0, len(*p))
 
-	for pkg, tags := range *p {
-		tags = strings.TrimSpace(tags)
+	for pkg := range *p {
+		keys = append(keys, pkg)
+	}
+
+	slices.Sort(keys)
+
+	result := make([]string, 0, len(keys))
+
+	for _, pkg := range keys {
+		tags := strings.TrimSpace((*p)[pkg])
 		if tags == "" {
 			continue
 		}
