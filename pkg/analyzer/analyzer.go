@@ -203,11 +203,24 @@ func fieldNames(field *ast.Field) []string {
 		return out
 	}
 
-	if id, ok := field.Type.(*ast.Ident); ok {
-		return []string{id.Name}
+	return []string{embeddedName(field.Type)}
+}
+
+func embeddedName(t ast.Expr) string {
+	switch e := t.(type) {
+	case *ast.Ident:
+		return e.Name
+	case *ast.StarExpr:
+		return embeddedName(e.X)
+	case *ast.SelectorExpr:
+		return e.Sel.Name
+	case *ast.IndexExpr:
+		return embeddedName(e.X)
+	case *ast.IndexListExpr:
+		return embeddedName(e.X)
 	}
 
-	return []string{"<embedded>"}
+	return "<embedded>"
 }
 
 func matchedTags(denied []string, tagStr string) []string {
