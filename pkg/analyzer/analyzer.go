@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/ast"
 	"slices"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
@@ -240,7 +241,12 @@ func dedup(in []string) []string {
 // Example: `json:"name"` -> [json].
 // Example: `json:"name,omitempty" xml:"Name"` -> [json, xml].
 func extractTagsFromString(s string) []string {
-	s = strings.Trim(s, "`")
+	if unq, err := strconv.Unquote(s); err == nil {
+		s = unq
+	} else {
+		s = strings.Trim(s, "`")
+	}
+
 	if s == "" {
 		return []string{}
 	}
