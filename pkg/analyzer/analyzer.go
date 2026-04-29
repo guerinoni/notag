@@ -20,6 +20,7 @@ func NewAnalyzer() *analysis.Analyzer {
 		setting: Setting{
 			Pkg:     make(PkgDenyMap),
 			PkgPath: make(PkgDenyMap),
+			Allow:   make(AllowValues),
 		},
 	}
 
@@ -29,6 +30,7 @@ func NewAnalyzer() *analysis.Analyzer {
 	a.Flags.Var(&r.setting.Pkg, "denied-pkg", "Per-package denied tags, format: pkg:tag1,tag2")
 	a.Flags.Var(&r.setting.PkgPath, "denied-pkg-path", "Per-package path denied tags, format: pkg_path:tag1,tag2")
 	a.Flags.BoolVar(&r.setting.IncludeGenerated, "include-generated", false, "also analyze files marked as generated (default: skip)")
+	a.Flags.Var(&r.setting.Allow, "allow", "Exempt specific tag values from denial, format: key=value (repeatable)")
 
 	return a
 }
@@ -107,6 +109,54 @@ type Setting struct {
 	// IncludeGenerated, when true, analyzes files marked as generated.
 	// Default (false) skips them.
 	IncludeGenerated bool
+	// Allow exempts specific tag values from denial.
+	// Map key is the tag key (e.g. "json"); slice contains allowed values
+	// (e.g. []string{"-"} permits `json:"-"` while `json:"name"` is still
+	// flagged when "json" is denied).
+	Allow AllowValues
+}
+
+// AllowValues maps a tag key to the set of values that should bypass denial.
+type AllowValues map[string][]string
+
+// String renders the allow map as a deterministic flag value `k=v,k=v2`.
+func (a *AllowValues) String() string {
+	if a == nil {
+		return ""
+	}
+
+	keys := make([]string, 0, len(*a))
+
+	for k := range *a {
+		keys = append(keys, k)
+	}
+
+	slices.Sort(keys)
+
+	parts := make([]string, 0, len(keys))
+
+	for _, k := range keys {
+		for _, v := range (*a)[k] {
+			parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+
+	return strings.Join(parts, ",")
+}
+
+// Set parses a `key=value` flag value. Repeated calls append to the same key.
+func (a *AllowValues) Set(value string) error {
+	parts := strings.SplitN(value, "=", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid format for allow: %s, expected key=value", value)
+	}
+
+	key := strings.TrimSpace(parts[0])
+	val := strings.TrimSpace(parts[1])
+
+	(*a)[key] = append((*a)[key], val)
+
+	return nil
 }
 
 type runner struct {
@@ -131,7 +181,7 @@ func (r *runner) run(pass *analysis.Pass) (any, error) {
 			return
 		}
 
-		inspectStruct(pass, tagsToCheck, node)
+		inspectStruct(pass, tagsToCheck, r.setting.Allow, node)
 	})
 
 	return nil, nil
@@ -171,7 +221,7 @@ func (r *runner) tagsForPass(pass *analysis.Pass) []string {
 	return dedup(tags)
 }
 
-func inspectStruct(pass *analysis.Pass, tagsToCheck []string, node ast.Node) {
+func inspectStruct(pass *analysis.Pass, tagsToCheck []string, allow AllowValues, node ast.Node) {
 	st, ok := node.(*ast.StructType)
 	if !ok || st.Fields == nil {
 		return
@@ -182,7 +232,7 @@ func inspectStruct(pass *analysis.Pass, tagsToCheck []string, node ast.Node) {
 			continue
 		}
 
-		failed := matchedTags(tagsToCheck, field.Tag.Value)
+		failed := matchedTags(tagsToCheck, allow, field.Tag.Value)
 		if len(failed) == 0 {
 			continue
 		}
@@ -223,17 +273,27 @@ func embeddedName(t ast.Expr) string {
 	return "<embedded>"
 }
 
-func matchedTags(denied []string, tagStr string) []string {
-	tags := extractTagsFromString(tagStr)
-	if len(tags) == 0 {
+func matchedTags(denied []string, allow AllowValues, tagStr string) []string {
+	pairs := extractTagPairs(tagStr)
+	if len(pairs) == 0 {
 		return nil
 	}
 
 	var out []string
 
 	for _, d := range denied {
-		if slices.Contains(tags, d) {
+		for _, p := range pairs {
+			if p.Key != d {
+				continue
+			}
+
+			if slices.Contains(allow[d], p.Value) {
+				continue
+			}
+
 			out = append(out, d)
+
+			break
 		}
 	}
 
@@ -278,12 +338,15 @@ func dedup(in []string) []string {
 	return out
 }
 
-// extractTagsFromString returns the tag keys present in a struct tag string.
-// It mirrors the parsing rules of reflect.StructTag, handling tab/space separators
-// and quoted values that may contain whitespace or escaped quotes.
-// Example: `json:"name"` -> [json].
-// Example: `json:"name,omitempty" xml:"Name"` -> [json, xml].
-func extractTagsFromString(s string) []string {
+type tagPair struct {
+	Key, Value string
+}
+
+// extractTagPairs returns the (key, value) entries from a struct tag literal.
+// It mirrors the parsing rules of reflect.StructTag, handling tab/space/newline
+// separators and quoted values that may contain whitespace or escaped quotes.
+// Both backtick and double-quoted forms of the literal are accepted.
+func extractTagPairs(s string) []tagPair {
 	if unq, err := strconv.Unquote(s); err == nil {
 		s = unq
 	} else {
@@ -291,10 +354,10 @@ func extractTagsFromString(s string) []string {
 	}
 
 	if s == "" {
-		return []string{}
+		return nil
 	}
 
-	var keys []string
+	var pairs []tagPair
 
 	for s != "" {
 		s = trimTagSpace(s)
@@ -307,20 +370,30 @@ func extractTagsFromString(s string) []string {
 			break
 		}
 
-		rest, ok = skipTagValue(rest)
+		value, rest, ok := nextTagValue(rest)
 		if !ok {
 			break
 		}
 
-		keys = append(keys, key)
+		pairs = append(pairs, tagPair{Key: key, Value: value})
 		s = rest
 	}
 
-	slices.Sort(keys)
+	return pairs
+}
 
-	if keys == nil {
-		return []string{}
+// extractTagsFromString returns the deduplicated, sorted set of tag keys.
+// Example: `json:"name"` -> [json].
+// Example: `json:"name,omitempty" xml:"Name"` -> [json, xml].
+func extractTagsFromString(s string) []string {
+	pairs := extractTagPairs(s)
+
+	keys := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		keys = append(keys, p.Key)
 	}
+
+	slices.Sort(keys)
 
 	return keys
 }
@@ -347,9 +420,9 @@ func nextTagKey(s string) (string, string, bool) {
 	return s[:i], s[i+1:], true
 }
 
-func skipTagValue(s string) (string, bool) {
+func nextTagValue(s string) (string, string, bool) {
 	if s == "" || s[0] != '"' {
-		return s, false
+		return "", s, false
 	}
 
 	i := 1
@@ -362,8 +435,14 @@ func skipTagValue(s string) (string, bool) {
 	}
 
 	if i >= len(s) {
-		return s, false
+		return "", s, false
 	}
 
-	return s[i+1:], true
+	raw := s[1:i]
+
+	if unesc, err := strconv.Unquote(`"` + raw + `"`); err == nil {
+		raw = unesc
+	}
+
+	return raw, s[i+1:], true
 }

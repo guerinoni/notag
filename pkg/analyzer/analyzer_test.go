@@ -142,6 +142,42 @@ func TestDedup(t *testing.T) {
 	}
 }
 
+func TestAllowValueExempts(t *testing.T) {
+	c := Setting{
+		GlobalTagsDenied: "json,xml",
+		Allow: AllowValues{
+			"json": []string{"-", "ignore"},
+			"xml":  []string{"-"},
+		},
+	}
+
+	td := analysistest.TestData()
+	a := NewAnalyzerWithConfig(c)
+
+	analysistest.Run(t, td, a, "allowval")
+}
+
+func TestAllowValuesSet(t *testing.T) {
+	m := AllowValues{}
+
+	if err := m.Set("json=-"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if err := m.Set("json=ignore"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	want := []string{"-", "ignore"}
+	if !reflect.DeepEqual(m["json"], want) {
+		t.Errorf("json = %v; want %v", m["json"], want)
+	}
+
+	if err := m.Set("bogus"); err == nil {
+		t.Error("expected err for missing =")
+	}
+}
+
 func TestIncludeGenerated(t *testing.T) {
 	c := Setting{
 		GlobalTagsDenied: "json",
